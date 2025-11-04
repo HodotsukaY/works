@@ -4,104 +4,7 @@
 <head>
     <meta charset="UTF-8" />
     <title>5カードドローポーカー</title>
-    <style>
-        body {
-            font-family: Arial;
-            background: #0b3d0b;
-            color: white;
-            text-align: center;
-        }
-
-        #hand, #dealer {
-            margin-top: 16px;
-        }
-
-        /* カード用コンテナ */
-        .cards .card {
-            display: inline-block;
-            position: relative;
-            margin: 5px;
-            outline: none;
-        }
-
-        /* 画像自体 */
-        .cards img {
-            width: 120px;
-            cursor: pointer;
-            border: 3px solid transparent;
-            border-radius: 6px;
-            transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
-            display: block;
-            background: white;
-        }
-
-        /* 選択バッジ */
-        .badge {
-            position: absolute;
-            left: 6px;
-            top: 6px;
-            padding: 2px 8px;
-            font-size: 12px;
-            background: rgba(0, 0, 0, 0.6);
-            color: #fff;
-            border-radius: 12px;
-            display: none;
-            pointer-events: none;
-        }
-
-        /* 選択時の見た目（浮き上がる・光る・ボーダー） */
-        .card.selected img {
-            transform: translateY(-14px) scale(1.06);
-            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.6), 0 0 16px rgba(255, 223, 0, 0.45);
-            border-color: #ffd700;
-            z-index: 2;
-        }
-
-        .card.selected .badge {
-            display: block;
-            background: linear-gradient(90deg, #ffd700, #ffb020);
-            color: #222;
-            font-weight: 600;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
-        }
-
-        .card:focus {
-            box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.08);
-            transform: translateY(-6px);
-        }
-
-        /* 勝敗表示 */
-        #result {
-            margin-top: 16px;
-            font-size: 18px;
-            font-weight: 700;
-        }
-
-        .winner img {
-            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 20px rgba(40, 200, 40, 0.35);
-            border-color: #7CFC00;
-            transform: translateY(-10px) scale(1.04);
-        }
-
-        .label {
-            margin-top: 8px;
-            font-size: 14px;
-            opacity: 0.95;
-        }
-
-        #status {
-            margin-top: 8px;
-            font-size: 13px;
-            color: #fffb;
-        }
-
-        #handEval {
-            margin-top: 6px;
-            font-size: 14px;
-            opacity: 0.95;
-        }
-    </style>
-
+    <link rel="stylesheet" href="./styles.css">
 </head>
 
 <body>
@@ -121,6 +24,29 @@
 
     <div id="result"></div>
 
+    <!-- 役一覧（テーブル） -->
+    <section id="ranksSection" class="ranks-section">
+        <h2>役一覧（強い順）</h2>
+        <p class="ranks-note">現在の手に該当する役は表で強調表示されます。</p>
+        <table id="handRanks" class="hand-ranks" aria-describedby="ranksSection">
+            <thead>
+                <tr><th>順位</th><th>役名</th><th>説明</th></tr>
+            </thead>
+            <tbody>
+                <!-- data-rank は evaluateHand の score[0] と一致させる -->
+                <tr data-rank="8"><td>1</td><td>ストレートフラッシュ</td><td>同じ絵柄で連続した5枚（ロイヤル含む）</td></tr>
+                <tr data-rank="7"><td>2</td><td>フォー・オブ・ア・カインド</td><td>同じランクが4枚（×4）</td></tr>
+                <tr data-rank="6"><td>3</td><td>フルハウス</td><td>スリー＋ペア（3枚＋2枚）</td></tr>
+                <tr data-rank="5"><td>4</td><td>フラッシュ</td><td>同じ絵柄の5枚（連番は不要）</td></tr>
+                <tr data-rank="4"><td>5</td><td>ストレート</td><td>連続した5枚（Aは高または A-2-3-4-5 の低扱い）</td></tr>
+                <tr data-rank="3"><td>6</td><td>スリー・オブ・ア・カインド</td><td>同じランクが3枚（残り2枚は異なる）</td></tr>
+                <tr data-rank="2"><td>7</td><td>ツーペア</td><td>2つのペア＋キッカー1枚</td></tr>
+                <tr data-rank="1"><td>8</td><td>ワンペア</td><td>同じランクが2枚（残り3枚は異なる）</td></tr>
+                <tr data-rank="0"><td>9</td><td>ハイカード</td><td>上記に該当しないとき。最上位のカードで比較</td></tr>
+            </tbody>
+        </table>
+    </section>
+
     <script>
         let deckId = "";
         let deckRemaining = 52;
@@ -136,6 +62,7 @@
         const resultDiv = document.getElementById("result");
         const statusDiv = document.getElementById("status");
         const handEvalDiv = document.getElementById("handEval");
+        const handRanksTable = document.getElementById("handRanks");
 
         startBtn.onclick = async () => {
             exchanged = false;
@@ -248,8 +175,15 @@
             if (hand.length === 5) {
                 const evalRes = evaluateHand(hand);
                 handEvalDiv.textContent = `現在の役: ${evalRes.name}`;
+                // テーブル内のハイライト更新
+                Array.from(handRanksTable.querySelectorAll('tr')).forEach(row => {
+                    row.classList.remove('current');
+                });
+                const matched = handRanksTable.querySelector(`tr[data-rank="${evalRes.score[0]}"]`);
+                if (matched) matched.classList.add('current');
             } else {
                 handEvalDiv.textContent = "";
+                Array.from(handRanksTable.querySelectorAll('tr')).forEach(row => row.classList.remove('current'));
             }
         }
 
