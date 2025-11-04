@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>5カードドローポーカー</title>
+    <style>
+        body {
+            font-family: Arial;
+            background: #0b3d0b;
+            color: white;
+            text-align: center;
+        }
+
+        #hand {
+            margin-top: 16px;
+        }
+
+        /* カード用コンテナ */
+        #hand .card {
+            display: inline-block;
+            position: relative;
+            margin: 5px;
+        }
+
+        /* 画像自体 */
+        #hand img {
+            width: 120px;
+            cursor: pointer;
+            border: 3px solid transparent;
+            border-radius: 6px;
+            transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+            display: block;
+            background: white; /* API画像の背景が透過でも見栄えする */
+        }
+
+        /* 選択バッジ */
+        .badge {
+            position: absolute;
+            left: 6px;
+            top: 6px;
+            padding: 2px 8px;
+            font-size: 12px;
+            background: rgba(0, 0, 0, 0.6);
+            color: #fff;
+            border-radius: 12px;
+            display: none;
+            pointer-events: none;
+        }
+
+        /* 選択時の見た目（浮き上がる・光る・ボーダー） */
+        .card.selected img {
+            transform: translateY(-14px) scale(1.06);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.6), 0 0 16px rgba(255, 223, 0, 0.45);
+            border-color: #ffd700;
+            z-index: 2;
+        }
+
+        .card.selected .badge {
+            display: block;
+            background: linear-gradient(90deg, #ffd700, #ffb020);
+            color: #222;
+            font-weight: 600;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+        }
+    </style>
+    
+</head>
+
+<body>
+    <h1>5カードドローポーカー</h1>
+
+    <button id="startBtn">ゲーム開始</button>
+    <div id="hand"></div>
+    <button id="drawBtn" style="display:none;">選択カードを交換</button>
+
+    <script>
+        let deckId = "";
+        let hand = [];
+        let selectedIndexes = new Set();
+
+        document.getElementById("startBtn").onclick = async () => {
+            const deck = await fetch("https://deckofcardsapi.com/api/deck/new/shuffle/?deck_count=1").then(r => r.json());
+            deckId = deck.deck_id;
+
+            const draw = await fetch(`https://deckofcardsapi.com/api/deck/${deckId}/draw/?count=5`).then(r => r.json());
+            hand = draw.cards;
+            showHand();
+            document.getElementById("drawBtn").style.display = "inline-block";
+        };
+
+        function showHand() {
+            const div = document.getElementById("hand");
+            div.innerHTML = "";
+            hand.forEach((card, index) => {
+                // カード用コンテナを作る
+                const cardDiv = document.createElement("div");
+                cardDiv.className = "card";
+
+                const img = document.createElement("img");
+                img.src = card.image;
+                img.alt = `${card.value} of ${card.suit}`;
+
+                // バッジ（選択時に表示）
+                const badge = document.createElement("span");
+                badge.className = "badge";
+                badge.textContent = "選択中";
+
+                // クリックで選択トグル
+                cardDiv.onclick = () => toggleSelect(index, cardDiv);
+
+                if (selectedIndexes.has(index)) cardDiv.classList.add("selected");
+
+                cardDiv.appendChild(img);
+                cardDiv.appendChild(badge);
+                div.appendChild(cardDiv);
+            });
+        }
+
+        function toggleSelect(index, cardDiv) {
+            if (selectedIndexes.has(index)) {
+                selectedIndexes.delete(index);
+                cardDiv.classList.remove("selected");
+            } else {
+                selectedIndexes.add(index);
+                cardDiv.classList.add("selected");
+            }
+        }
+
+        document.getElementById("drawBtn").onclick = async () => {
+            const count = selectedIndexes.size;
+            if (count === 0) {
+                alert("交換するカードを選んでください！");
+                return;
+            }
+
+            const draw = await fetch(`https://deckofcardsapi.com/api/deck/${deckId}/draw/?count=${count}`).then(r => r.json());
+            const newCards = draw.cards;
+
+            // 入れ替え
+            let i = 0;
+            [...selectedIndexes].forEach(idx => {
+                hand[idx] = newCards[i];
+                i++;
+            });
+            selectedIndexes.clear();
+
+            showHand();
+            document.getElementById("drawBtn").style.display = "none"; // 1回のみ
+            alert("交換完了！ 役判定は次のステップで追加します！");
+        };
+    </script>
+</body>
+
+</html>
