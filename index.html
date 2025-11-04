@@ -12,26 +12,26 @@
             text-align: center;
         }
 
-        #hand {
+        #hand, #dealer {
             margin-top: 16px;
         }
 
         /* カード用コンテナ */
-        #hand .card {
+        .cards .card {
             display: inline-block;
             position: relative;
             margin: 5px;
         }
 
         /* 画像自体 */
-        #hand img {
+        .cards img {
             width: 120px;
             cursor: pointer;
             border: 3px solid transparent;
             border-radius: 6px;
             transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
             display: block;
-            background: white; /* API画像の背景が透過でも見栄えする */
+            background: white;
         }
 
         /* 選択バッジ */
@@ -63,6 +63,25 @@
             font-weight: 600;
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
         }
+
+        /* 勝敗表示 */
+        #result {
+            margin-top: 16px;
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .winner img {
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 20px rgba(40, 200, 40, 0.35);
+            border-color: #7CFC00;
+            transform: translateY(-10px) scale(1.04);
+        }
+
+        .label {
+            margin-top: 8px;
+            font-size: 14px;
+            opacity: 0.9;
+        }
     </style>
     
 </head>
@@ -71,29 +90,46 @@
     <h1>5カードドローポーカー</h1>
 
     <button id="startBtn">ゲーム開始</button>
-    <div id="hand"></div>
-    <button id="drawBtn" style="display:none;">選択カードを交換</button>
+    <div class="label">プレイヤーの手</div>
+    <div id="hand" class="cards"></div>
+    <button id="drawBtn" style="display:none;">選択カードを交換（1回）</button>
+
+    <div class="label">ディーラーの手</div>
+    <div id="dealer" class="cards"></div>
+
+    <div id="result"></div>
 
     <script>
         let deckId = "";
         let hand = [];
+        let dealerHand = [];
         let selectedIndexes = new Set();
+        let exchanged = false;
 
-        document.getElementById("startBtn").onclick = async () => {
+        const startBtn = document.getElementById("startBtn");
+        const drawBtn = document.getElementById("drawBtn");
+        const handDiv = document.getElementById("hand");
+        const dealerDiv = document.getElementById("dealer");
+        const resultDiv = document.getElementById("result");
+
+        startBtn.onclick = async () => {
+            exchanged = false;
+            resultDiv.textContent = "";
+            dealerDiv.innerHTML = "";
+            selectedIndexes.clear();
             const deck = await fetch("https://deckofcardsapi.com/api/deck/new/shuffle/?deck_count=1").then(r => r.json());
             deckId = deck.deck_id;
 
             const draw = await fetch(`https://deckofcardsapi.com/api/deck/${deckId}/draw/?count=5`).then(r => r.json());
             hand = draw.cards;
             showHand();
-            document.getElementById("drawBtn").style.display = "inline-block";
+            drawBtn.style.display = "inline-block";
+            drawBtn.disabled = false;
         };
 
         function showHand() {
-            const div = document.getElementById("hand");
-            div.innerHTML = "";
+            handDiv.innerHTML = "";
             hand.forEach((card, index) => {
-                // カード用コンテナを作る
                 const cardDiv = document.createElement("div");
                 cardDiv.className = "card";
 
@@ -101,23 +137,35 @@
                 img.src = card.image;
                 img.alt = `${card.value} of ${card.suit}`;
 
-                // バッジ（選択時に表示）
                 const badge = document.createElement("span");
                 badge.className = "badge";
                 badge.textContent = "選択中";
 
-                // クリックで選択トグル
                 cardDiv.onclick = () => toggleSelect(index, cardDiv);
 
                 if (selectedIndexes.has(index)) cardDiv.classList.add("selected");
 
                 cardDiv.appendChild(img);
                 cardDiv.appendChild(badge);
-                div.appendChild(cardDiv);
+                handDiv.appendChild(cardDiv);
+            });
+        }
+
+        function showDealer() {
+            dealerDiv.innerHTML = "";
+            dealerHand.forEach((card, index) => {
+                const cardDiv = document.createElement("div");
+                cardDiv.className = "card";
+                const img = document.createElement("img");
+                img.src = card.image;
+                img.alt = `${card.value} of ${card.suit}`;
+                cardDiv.appendChild(img);
+                dealerDiv.appendChild(cardDiv);
             });
         }
 
         function toggleSelect(index, cardDiv) {
+            if (exchanged) return; // 交換後は選択不可
             if (selectedIndexes.has(index)) {
                 selectedIndexes.delete(index);
                 cardDiv.classList.remove("selected");
@@ -127,28 +175,151 @@
             }
         }
 
-        document.getElementById("drawBtn").onclick = async () => {
+        drawBtn.onclick = async () => {
+            if (exchanged) return;
             const count = selectedIndexes.size;
-            if (count === 0) {
-                alert("交換するカードを選んでください！");
-                return;
-            }
-
+            // 引き直したくない場合は0でもディーラー対戦する（自動的に勝敗判定）
             const draw = await fetch(`https://deckofcardsapi.com/api/deck/${deckId}/draw/?count=${count}`).then(r => r.json());
-            const newCards = draw.cards;
+            const newCards = draw.cards || [];
 
-            // 入れ替え
             let i = 0;
             [...selectedIndexes].forEach(idx => {
                 hand[idx] = newCards[i];
                 i++;
             });
             selectedIndexes.clear();
+            exchanged = true;
+            drawBtn.disabled = true;
 
             showHand();
-            document.getElementById("drawBtn").style.display = "none"; // 1回のみ
-            alert("交換完了！ 役判定は次のステップで追加します！");
+
+            // ディーラーが5枚引く
+            const d = await fetch(`https://deckofcardsapi.com/api/deck/${deckId}/draw/?count=5`).then(r => r.json());
+            dealerHand = d.cards;
+            showDealer();
+
+            const pEval = evaluateHand(hand);
+            const dEval = evaluateHand(dealerHand);
+
+            const cmp = compareHands(pEval.score, dEval.score);
+
+            // 強調表示
+            if (cmp > 0) {
+                // プレイヤー勝ち
+                highlightWinner(handDiv);
+                resultDiv.textContent = `あなたの勝ち — あなた: ${pEval.name} / ディーラー: ${dEval.name}`;
+            } else if (cmp < 0) {
+                highlightWinner(dealerDiv);
+                resultDiv.textContent = `あなたの負け — あなた: ${pEval.name} / ディーラー: ${dEval.name}`;
+            } else {
+                resultDiv.textContent = `引き分け — あなた: ${pEval.name} / ディーラー: ${dEval.name}`;
+            }
         };
+
+        function highlightWinner(container) {
+            // container 内のカードに winner クラスを付与
+            Array.from(container.querySelectorAll('.card')).forEach(cd => cd.classList.add('winner'));
+        }
+
+        // 値を数値化
+        function valueToRank(v) {
+            if (v === "ACE") return 14;
+            if (v === "KING") return 13;
+            if (v === "QUEEN") return 12;
+            if (v === "JACK") return 11;
+            return parseInt(v, 10);
+        }
+
+        // 役を判定して比較用のスコア配列を返す
+        function evaluateHand(cards) {
+            const ranks = cards.map(c => valueToRank(c.value)).sort((a, b) => b - a);
+            const suits = cards.map(c => c.suit);
+            const counts = {};
+            ranks.forEach(r => counts[r] = (counts[r] || 0) + 1);
+            const countsArr = Object.entries(counts).map(([r, c]) => ({ rank: parseInt(r), count: c }))
+                .sort((a, b) => {
+                    if (b.count !== a.count) return b.count - a.count;
+                    return b.rank - a.rank;
+                });
+
+            const isFlush = suits.every(s => s === suits[0]);
+
+            // straight 判定（A-2-3-4-5 を許可）
+            let isStraight = false;
+            let straightHigh = 0;
+            // 一意のランクでソート昇順
+            const uniqRanks = Array.from(new Set(ranks)).sort((a, b) => a - b);
+            if (uniqRanks.length === 5) {
+                const max = uniqRanks[4], min = uniqRanks[0];
+                if (max - min === 4) {
+                    isStraight = true;
+                    straightHigh = max;
+                } else {
+                    // wheel (A,5,4,3,2)
+                    if (uniqRanks.toString() === [2, 3, 4, 5, 14].toString()) {
+                        isStraight = true;
+                        straightHigh = 5; // Aを低く扱う
+                    }
+                }
+            }
+
+            // カテゴリ決定（数値は比較優先度）
+            // 8: ストレートフラッシュ,7: フォーカード,6: フルハウス,5: フラッシュ,4: ストレート
+            // 3: スリーカード,2: ツーペア,1: ワンペア,0: ハイカード
+            let score = [];
+            let name = "";
+
+            if (isStraight && isFlush) {
+                name = "ストレートフラッシュ";
+                score = [8, straightHigh];
+            } else if (countsArr[0].count === 4) {
+                name = "フォー・オブ・ア・カインド";
+                const quad = countsArr[0].rank;
+                const kicker = countsArr[1].rank;
+                score = [7, quad, kicker];
+            } else if (countsArr[0].count === 3 && countsArr[1] && countsArr[1].count === 2) {
+                name = "フルハウス";
+                score = [6, countsArr[0].rank, countsArr[1].rank];
+            } else if (isFlush) {
+                name = "フラッシュ";
+                score = [5, ...ranks]; // tiebreakers: 高い順のランク列
+            } else if (isStraight) {
+                name = "ストレート";
+                score = [4, straightHigh];
+            } else if (countsArr[0].count === 3) {
+                name = "スリー・オブ・ア・カインド";
+                const trip = countsArr[0].rank;
+                const kickers = countsArr.slice(1).map(x => x.rank).sort((a,b)=>b-a);
+                score = [3, trip, ...kickers];
+            } else if (countsArr[0].count === 2 && countsArr[1] && countsArr[1].count === 2) {
+                name = "ツーペア";
+                const highPair = Math.max(countsArr[0].rank, countsArr[1].rank);
+                const lowPair = Math.min(countsArr[0].rank, countsArr[1].rank);
+                const kicker = countsArr.find(x => x.count === 1).rank;
+                score = [2, highPair, lowPair, kicker];
+            } else if (countsArr[0].count === 2) {
+                name = "ワンペア";
+                const pair = countsArr[0].rank;
+                const kickers = countsArr.slice(1).map(x => x.rank).sort((a,b)=>b-a);
+                score = [1, pair, ...kickers];
+            } else {
+                name = "ハイカード";
+                score = [0, ...ranks];
+            }
+
+            return { name, score };
+        }
+
+        // スコア配列を比較: 正ならaが強い, 負ならbが強い, 0なら同等
+        function compareHands(aScore, bScore) {
+            for (let i = 0; i < Math.max(aScore.length, bScore.length); i++) {
+                const a = aScore[i] || 0;
+                const b = bScore[i] || 0;
+                if (a > b) return 1;
+                if (a < b) return -1;
+            }
+            return 0;
+        }
     </script>
 </body>
 
