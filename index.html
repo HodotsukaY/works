@@ -21,6 +21,7 @@
             display: inline-block;
             position: relative;
             margin: 5px;
+            outline: none;
         }
 
         /* 画像自体 */
@@ -64,6 +65,11 @@
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
         }
 
+        .card:focus {
+            box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.08);
+            transform: translateY(-6px);
+        }
+
         /* 勝敗表示 */
         #result {
             margin-top: 16px;
@@ -80,10 +86,22 @@
         .label {
             margin-top: 8px;
             font-size: 14px;
-            opacity: 0.9;
+            opacity: 0.95;
+        }
+
+        #status {
+            margin-top: 8px;
+            font-size: 13px;
+            color: #fffb;
+        }
+
+        #handEval {
+            margin-top: 6px;
+            font-size: 14px;
+            opacity: 0.95;
         }
     </style>
-    
+
 </head>
 
 <body>
@@ -91,16 +109,21 @@
 
     <button id="startBtn">ゲーム開始</button>
     <div class="label">プレイヤーの手</div>
-    <div id="hand" class="cards"></div>
-    <button id="drawBtn" style="display:none;">選択カードを交換（1回）</button>
+    <div id="hand" class="cards" aria-live="polite"></div>
+
+    <div id="status" class="label">選択: 0 / 残りカード: -</div>
+    <div id="handEval" class="label"></div>
+
+    <button id="drawBtn" style="display:none;">選択カードを交換（0）</button>
 
     <div class="label">ディーラーの手</div>
-    <div id="dealer" class="cards"></div>
+    <div id="dealer" class="cards" aria-live="polite"></div>
 
     <div id="result"></div>
 
     <script>
         let deckId = "";
+        let deckRemaining = 52;
         let hand = [];
         let dealerHand = [];
         let selectedIndexes = new Set();
@@ -111,18 +134,25 @@
         const handDiv = document.getElementById("hand");
         const dealerDiv = document.getElementById("dealer");
         const resultDiv = document.getElementById("result");
+        const statusDiv = document.getElementById("status");
+        const handEvalDiv = document.getElementById("handEval");
 
         startBtn.onclick = async () => {
             exchanged = false;
             resultDiv.textContent = "";
             dealerDiv.innerHTML = "";
+            handEvalDiv.textContent = "";
             selectedIndexes.clear();
+
             const deck = await fetch("https://deckofcardsapi.com/api/deck/new/shuffle/?deck_count=1").then(r => r.json());
             deckId = deck.deck_id;
+            deckRemaining = deck.remaining || 52;
 
             const draw = await fetch(`https://deckofcardsapi.com/api/deck/${deckId}/draw/?count=5`).then(r => r.json());
             hand = draw.cards;
+            deckRemaining = draw.remaining || deckRemaining;
             showHand();
+            updateStatus();
             drawBtn.style.display = "inline-block";
             drawBtn.disabled = false;
         };
@@ -132,6 +162,10 @@
             hand.forEach((card, index) => {
                 const cardDiv = document.createElement("div");
                 cardDiv.className = "card";
+                cardDiv.setAttribute("role", "button");
+                cardDiv.setAttribute("tabindex", "0");
+                cardDiv.setAttribute("aria-pressed", selectedIndexes.has(index) ? "true" : "false");
+                cardDiv.setAttribute("aria-label", `${index + 1}番: ${card.value} の ${card.suit}`);
 
                 const img = document.createElement("img");
                 img.src = card.image;
@@ -141,7 +175,13 @@
                 badge.className = "badge";
                 badge.textContent = "選択中";
 
-                cardDiv.onclick = () => toggleSelect(index, cardDiv);
+                cardDiv.onclick = () => { toggleSelect(index, cardDiv); };
+                cardDiv.onkeydown = (e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        toggleSelect(index, cardDiv);
+                    }
+                };
 
                 if (selectedIndexes.has(index)) cardDiv.classList.add("selected");
 
@@ -149,6 +189,26 @@
                 cardDiv.appendChild(badge);
                 handDiv.appendChild(cardDiv);
             });
+
+            // キーボード1-5で選択切替（数字キー）
+            // 既に同じイベントを重複登録しないように一度だけ設定
+            if (!document._pokerKeyInit) {
+                document.addEventListener('keydown', (e) => {
+                    // 1〜5 のキーでカードを選択
+                    if (!exchanged && e.key >= '1' && e.key <= '5') {
+                        const idx = parseInt(e.key, 10) - 1;
+                        const cardNodes = handDiv.querySelectorAll('.card');
+                        if (cardNodes[idx]) {
+                            cardNodes[idx].focus();
+                            toggleSelect(idx, cardNodes[idx]);
+                        }
+                    }
+                });
+                document._pokerKeyInit = true;
+            }
+
+            updateHandEvaluation();
+            updateStatus();
         }
 
         function showDealer() {
@@ -169,18 +229,37 @@
             if (selectedIndexes.has(index)) {
                 selectedIndexes.delete(index);
                 cardDiv.classList.remove("selected");
+                cardDiv.setAttribute("aria-pressed", "false");
             } else {
                 selectedIndexes.add(index);
                 cardDiv.classList.add("selected");
+                cardDiv.setAttribute("aria-pressed", "true");
+            }
+            updateStatus();
+        }
+
+        function updateStatus() {
+            const count = selectedIndexes.size;
+            statusDiv.textContent = `選択: ${count} / 残りカード: ${deckRemaining}`;
+            drawBtn.textContent = `選択カードを交換（${count}）`;
+        }
+
+        function updateHandEvaluation() {
+            if (hand.length === 5) {
+                const evalRes = evaluateHand(hand);
+                handEvalDiv.textContent = `現在の役: ${evalRes.name}`;
+            } else {
+                handEvalDiv.textContent = "";
             }
         }
 
         drawBtn.onclick = async () => {
             if (exchanged) return;
             const count = selectedIndexes.size;
-            // 引き直したくない場合は0でもディーラー対戦する（自動的に勝敗判定）
+            // 引き直したくない場合は0でもディーラー対戦する
             const draw = await fetch(`https://deckofcardsapi.com/api/deck/${deckId}/draw/?count=${count}`).then(r => r.json());
             const newCards = draw.cards || [];
+            deckRemaining = draw.remaining || deckRemaining;
 
             let i = 0;
             [...selectedIndexes].forEach(idx => {
@@ -196,6 +275,7 @@
             // ディーラーが5枚引く
             const d = await fetch(`https://deckofcardsapi.com/api/deck/${deckId}/draw/?count=5`).then(r => r.json());
             dealerHand = d.cards;
+            deckRemaining = d.remaining || deckRemaining;
             showDealer();
 
             const pEval = evaluateHand(hand);
@@ -205,7 +285,6 @@
 
             // 強調表示
             if (cmp > 0) {
-                // プレイヤー勝ち
                 highlightWinner(handDiv);
                 resultDiv.textContent = `あなたの勝ち — あなた: ${pEval.name} / ディーラー: ${dEval.name}`;
             } else if (cmp < 0) {
@@ -214,10 +293,11 @@
             } else {
                 resultDiv.textContent = `引き分け — あなた: ${pEval.name} / ディーラー: ${dEval.name}`;
             }
+
+            updateStatus();
         };
 
         function highlightWinner(container) {
-            // container 内のカードに winner クラスを付与
             Array.from(container.querySelectorAll('.card')).forEach(cd => cd.classList.add('winner'));
         }
 
@@ -247,7 +327,6 @@
             // straight 判定（A-2-3-4-5 を許可）
             let isStraight = false;
             let straightHigh = 0;
-            // 一意のランクでソート昇順
             const uniqRanks = Array.from(new Set(ranks)).sort((a, b) => a - b);
             if (uniqRanks.length === 5) {
                 const max = uniqRanks[4], min = uniqRanks[0];
@@ -255,17 +334,13 @@
                     isStraight = true;
                     straightHigh = max;
                 } else {
-                    // wheel (A,5,4,3,2)
                     if (uniqRanks.toString() === [2, 3, 4, 5, 14].toString()) {
                         isStraight = true;
-                        straightHigh = 5; // Aを低く扱う
+                        straightHigh = 5;
                     }
                 }
             }
 
-            // カテゴリ決定（数値は比較優先度）
-            // 8: ストレートフラッシュ,7: フォーカード,6: フルハウス,5: フラッシュ,4: ストレート
-            // 3: スリーカード,2: ツーペア,1: ワンペア,0: ハイカード
             let score = [];
             let name = "";
 
@@ -282,7 +357,7 @@
                 score = [6, countsArr[0].rank, countsArr[1].rank];
             } else if (isFlush) {
                 name = "フラッシュ";
-                score = [5, ...ranks]; // tiebreakers: 高い順のランク列
+                score = [5, ...ranks];
             } else if (isStraight) {
                 name = "ストレート";
                 score = [4, straightHigh];
@@ -310,7 +385,6 @@
             return { name, score };
         }
 
-        // スコア配列を比較: 正ならaが強い, 負ならbが強い, 0なら同等
         function compareHands(aScore, bScore) {
             for (let i = 0; i < Math.max(aScore.length, bScore.length); i++) {
                 const a = aScore[i] || 0;
