@@ -2,153 +2,249 @@
 <html lang="ja">
 
 <head>
-    <meta charset="UTF-8" />
-    <title>5カードドローポーカー</title>
+    <meta charset="UTF-8">
+    <title>カードログイン画面</title>
     <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont,
+                "Segoe UI", "Noto Sans JP", sans-serif;
+        }
+
         body {
-            font-family: Arial;
-            background: #0b3d0b;
-            color: white;
-            text-align: center;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background:
+                radial-gradient(circle at 20% 20%, #277b3c 0, #16602c 55%, #0e3f1d 100%);
         }
 
-        #hand {
-            margin-top: 16px;
-        }
-
-        /* カード用コンテナ */
-        #hand .card {
-            display: inline-block;
-            position: relative;
-            margin: 5px;
-        }
-
-        /* 画像自体 */
-        #hand img {
-            width: 120px;
-            cursor: pointer;
-            border: 3px solid transparent;
-            border-radius: 6px;
-            transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
-            display: block;
-            background: white; /* API画像の背景が透過でも見栄えする */
-        }
-
-        /* 選択バッジ */
-        .badge {
-            position: absolute;
-            left: 6px;
-            top: 6px;
-            padding: 2px 8px;
-            font-size: 12px;
-            background: rgba(0, 0, 0, 0.6);
+        header,
+        footer {
+            background: #e5861b;
             color: #fff;
-            border-radius: 12px;
-            display: none;
-            pointer-events: none;
+            padding: 10px 30px;
+            font-size: 28px;
+            font-weight: 700;
         }
 
-        /* 選択時の見た目（浮き上がる・光る・ボーダー） */
-        .card.selected img {
-            transform: translateY(-14px) scale(1.06);
-            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.6), 0 0 16px rgba(255, 223, 0, 0.45);
-            border-color: #ffd700;
-            z-index: 2;
+        header {
+            flex-shrink: 0;
         }
 
-        .card.selected .badge {
+        footer {
+            flex-shrink: 0;
+            text-align: right;
+            font-size: 14px;
+        }
+
+        main {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .table-area {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 30px;
+            width: 100%;
+            max-width: 1100px;
+        }
+
+        .cards-row {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 50px;
+            flex-wrap: wrap;
+        }
+
+        .card-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .card {
+            position: relative;
+            width: 190px;
+            max-width: 24vw;
+            aspect-ratio: 63 / 88;
+            /* ぽい比率 */
+        }
+
+        .card img {
+            width: 100%;
+            height: 100%;
             display: block;
-            background: linear-gradient(90deg, #ffd700, #ffb020);
-            color: #222;
+            border-radius: 14px;
+            box-shadow: 0 12px 25px rgba(0, 0, 0, 0.4);
+        }
+
+        .card-inner {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 18% 12% 14%;
+            pointer-events: none;
+            /* 文字はクリックさせない */
+        }
+
+        .field-label {
+            color: #444;
+            font-size: 20px;
             font-weight: 600;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+            margin-bottom: 14px;
+            text-align: center;
+            text-shadow: 0 0 3px rgba(255, 255, 255, 0.7);
+        }
+
+        .field-input {
+            width: 100%;
+            pointer-events: auto;
+            /* input だけ操作可能に戻す */
+            padding: 6px 10px;
+            border-radius: 8px;
+            border: 3px solid #555;
+            background: #dcdcdc;
+            font-size: 16px;
+            outline: none;
+        }
+
+        .field-input:focus {
+            background: #f5f5f5;
+            border-color: #f39c12;
+        }
+
+        .btn {
+            min-width: 190px;
+            padding: 12px 26px;
+            border-radius: 12px;
+            border: 3px solid #c77707;
+            background: #f4b034;
+            font-size: 18px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 6px 0 #b06304;
+            transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.1s;
+        }
+
+        .btn:hover {
+            background: #ffd36b;
+        }
+
+        .btn:active {
+            transform: translateY(3px);
+            box-shadow: 0 3px 0 #b06304;
+        }
+
+        .btn-secondary {
+            background: #ffe082;
+        }
+
+        @media (max-width: 768px) {
+            header {
+                font-size: 20px;
+                text-align: center;
+            }
+
+            .cards-row {
+                gap: 25px;
+            }
+
+            .btn {
+                min-width: 160px;
+                font-size: 16px;
+            }
         }
     </style>
-    
 </head>
 
 <body>
-    <h1>5カードドローポーカー</h1>
+    <header>画面イメージ（2. ログイン画面）</header>
 
-    <button id="startBtn">ゲーム開始</button>
-    <div id="hand"></div>
-    <button id="drawBtn" style="display:none;">選択カードを交換</button>
+    <main>
+        <div class="table-area">
+            <div class="cards-row">
+                <!-- 左：カードの裏面 ＋ 新規ユーザ登録 -->
+                <div class="card-wrapper">
+                    <div class="card">
+                        <!-- Deck of Cards API の裏面画像 -->
+                        <img src="https://deckofcardsapi.com/static/img/back.png" alt="card back">
+                    </div>
+                    <button class="btn btn-secondary" type="button" onclick="alert('新規ユーザー登録画面へ遷移（ダミー）');">
+                        新規ユーザー登録
+                    </button>
+                </div>
+
+                <!-- user_name -->
+                <div class="card-wrapper">
+                    <div class="card">
+                        <!-- A♦ -->
+                        <img src="https://deckofcardsapi.com/static/img/AD.png" alt="Ace of Diamonds">
+                        <div class="card-inner">
+                            <div class="field-label">user_name</div>
+                            <input class="field-input" type="text" id="user_name" autocomplete="username">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- user_id -->
+                <div class="card-wrapper">
+                    <div class="card">
+                        <!-- 2♣ -->
+                        <img src="https://deckofcardsapi.com/static/img/2C.png" alt="Two of Clubs">
+                        <div class="card-inner">
+                            <div class="field-label">user_id</div>
+                            <input class="field-input" type="text" id="user_id">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- password -->
+                <div class="card-wrapper">
+                    <div class="card">
+                        <!-- 3♥ -->
+                        <img src="https://deckofcardsapi.com/static/img/3H.png" alt="Three of Hearts">
+                        <div class="card-inner">
+                            <div class="field-label">password</div>
+                            <input class="field-input" type="password" id="password" autocomplete="current-password">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ログインボタン -->
+            <button class="btn" type="button" onclick="handleLogin()">ログイン</button>
+        </div>
+    </main>
+
+    <footer>8</footer>
 
     <script>
-        let deckId = "";
-        let hand = [];
-        let selectedIndexes = new Set();
+        function handleLogin() {
+            const name = document.getElementById('user_name').value;
+            const id = document.getElementById('user_id').value;
+            const pw = document.getElementById('password').value;
 
-        document.getElementById("startBtn").onclick = async () => {
-            const deck = await fetch("https://deckofcardsapi.com/api/deck/new/shuffle/?deck_count=1").then(r => r.json());
-            deckId = deck.deck_id;
-
-            const draw = await fetch(`https://deckofcardsapi.com/api/deck/${deckId}/draw/?count=5`).then(r => r.json());
-            hand = draw.cards;
-            showHand();
-            document.getElementById("drawBtn").style.display = "inline-block";
-        };
-
-        function showHand() {
-            const div = document.getElementById("hand");
-            div.innerHTML = "";
-            hand.forEach((card, index) => {
-                // カード用コンテナを作る
-                const cardDiv = document.createElement("div");
-                cardDiv.className = "card";
-
-                const img = document.createElement("img");
-                img.src = card.image;
-                img.alt = `${card.value} of ${card.suit}`;
-
-                // バッジ（選択時に表示）
-                const badge = document.createElement("span");
-                badge.className = "badge";
-                badge.textContent = "選択中";
-
-                // クリックで選択トグル
-                cardDiv.onclick = () => toggleSelect(index, cardDiv);
-
-                if (selectedIndexes.has(index)) cardDiv.classList.add("selected");
-
-                cardDiv.appendChild(img);
-                cardDiv.appendChild(badge);
-                div.appendChild(cardDiv);
-            });
-        }
-
-        function toggleSelect(index, cardDiv) {
-            if (selectedIndexes.has(index)) {
-                selectedIndexes.delete(index);
-                cardDiv.classList.remove("selected");
-            } else {
-                selectedIndexes.add(index);
-                cardDiv.classList.add("selected");
-            }
-        }
-
-        document.getElementById("drawBtn").onclick = async () => {
-            const count = selectedIndexes.size;
-            if (count === 0) {
-                alert("交換するカードを選んでください！");
+            // ここでサーバと連携する処理を書けばOK
+            // 今は動作確認用にアラートだけ
+            if (!name || !id || !pw) {
+                alert('user_name / user_id / password を入力してください。');
                 return;
             }
-
-            const draw = await fetch(`https://deckofcardsapi.com/api/deck/${deckId}/draw/?count=${count}`).then(r => r.json());
-            const newCards = draw.cards;
-
-            // 入れ替え
-            let i = 0;
-            [...selectedIndexes].forEach(idx => {
-                hand[idx] = newCards[i];
-                i++;
-            });
-            selectedIndexes.clear();
-
-            showHand();
-            document.getElementById("drawBtn").style.display = "none"; // 1回のみ
-            alert("交換完了！ 役判定は次のステップで追加します！");
-        };
+            alert(`ログイン処理（ダミー）\nuser_name: ${name}\nuser_id: ${id}`);
+        }
     </script>
 </body>
 
